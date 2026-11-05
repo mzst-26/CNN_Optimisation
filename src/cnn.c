@@ -499,8 +499,9 @@ deallocate_memory();
 
 int main() {
 
-double start_time, run_time;
-double RUNS[run_times]; // array to store the run times
+    double start_time, run_time;
+    double RUNS[run_times]; // array to store the run times
+    int i, j;
 
     for (int i = 0; i < run_times; i++) {
 
@@ -510,10 +511,23 @@ double RUNS[run_times]; // array to store the run times
 
         RUNS[i] = run_time; // store the run time in the array
 
-        printf("run %d: %f s\n", i, RUNS[i]); // print the run time for this iteration
-        
+        // printf("run %d: %f s\n", i, RUNS[i]); // print the run time for this iteration
     }
 
-return 0;
+    for (i = 0; i < run_times -1; i++) {
+        for (j = 0; j < run_times - i - 1; j++) {
+            if (RUNS[j] > RUNS[j + 1]) {
+                double temp = RUNS[j];
+                RUNS[j] = RUNS[j + 1];
+                RUNS[j + 1] = temp;
+            }
+        }
+    }
+    printf("\nmin    = %f s\n", RUNS[0]);
+    printf("Median run time: %f s\n", RUNS[run_times / 2]); // print the median run time
+    printf("max    = %f s\n", RUNS[run_times - 1]);
+    printf("avg    = %f s\n", (RUNS[0] + RUNS[run_times - 1]) / 2); // print the average of min and max run times
+
+    return 0;
 }
 
