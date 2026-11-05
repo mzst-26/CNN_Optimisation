@@ -495,25 +495,24 @@ deallocate_memory();
 
 }
 
-#define run_times 31
+#define run_times 31 // odd number to get an element as median 
 
 int main() {
 
 double start_time, run_time;
-double RUNS[run_times];
+double RUNS[run_times]; // array to store the run times
 
-for (int i = 0; i < run_times; i++) {
-    start_time = omp_get_wtime();
+    for (int i = 0; i < run_times; i++) {
 
-    cnn();
+        start_time = omp_get_wtime();  // start the timer
+        cnn();
+        run_time = (omp_get_wtime() - start_time); //end the timer and calculate the run time
 
-    run_time = (omp_get_wtime() - start_time);
+        RUNS[i] = run_time; // store the run time in the array
 
-    RUNS[i] = run_time;
-
-    printf("run %d: %f s\n", i, RUNS[i]);
-    
-}
+        printf("run %d: %f s\n", i, RUNS[i]); // print the run time for this iteration
+        
+    }
 
 return 0;
 }
