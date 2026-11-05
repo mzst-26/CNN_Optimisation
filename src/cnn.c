@@ -496,6 +496,7 @@ deallocate_memory();
 }
 
 #define run_times 31 // odd number to get an element as median 
+#define batch_size 10
 
 int main() {
 
@@ -506,7 +507,10 @@ int main() {
     for (int i = 0; i < run_times; i++) {
 
         start_time = omp_get_wtime();  // start the timer
-        cnn();
+
+        for (int br = 0; br < batch_size; br++){
+            cnn();
+        }
         run_time = (omp_get_wtime() - start_time); //end the timer and calculate the run time
 
         RUNS[i] = run_time; // store the run time in the array
@@ -516,13 +520,15 @@ int main() {
 
     for (i = 0; i < run_times -1; i++) {
         for (j = 0; j < run_times - i - 1; j++) {
-            if (RUNS[j] > RUNS[j + 1]) {
-                double temp = RUNS[j];
-                RUNS[j] = RUNS[j + 1];
-                RUNS[j + 1] = temp;
+            if (RUNS[j] > RUNS[j + 1]) { // if the current run time is greater than the next run time, swap them
+                double temp = RUNS[j]; // store the current run time in a temporary variable
+                RUNS[j] = RUNS[j + 1];// assign the next run time to the current run time
+                RUNS[j + 1] = temp;//set the current run time to the next run time
             }
         }
     }
+
+
     printf("\nmin    = %f s\n", RUNS[0]);
     printf("Median run time: %f s\n", RUNS[run_times / 2]); // print the median run time
     printf("max    = %f s\n", RUNS[run_times - 1]);
