@@ -495,8 +495,8 @@ deallocate_memory();
 
 }
 
-#define run_times 31 // odd number to get an element as median 
-#define batch_size 10
+#define run_times 11 // odd number to get an element as median 
+#define reps 15
 
 int main() {
 
@@ -508,7 +508,7 @@ int main() {
 
         start_time = omp_get_wtime();  // start the timer
 
-        for (int br = 0; br < batch_size; br++){
+        for (int br = 0; br < reps; br++){
             cnn();
         }
         run_time = (omp_get_wtime() - start_time); //end the timer and calculate the run time
@@ -532,7 +532,6 @@ int main() {
     printf("\nmin    = %f s\n", RUNS[0]);
     printf("Median run time: %f s\n", RUNS[run_times / 2]); // print the median run time
     printf("max    = %f s\n", RUNS[run_times - 1]);
-    printf("avg    = %f s\n", (RUNS[0] + RUNS[run_times - 1]) / 2); // print the average of min and max run times
 
     return 0;
 }
