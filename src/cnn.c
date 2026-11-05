@@ -495,21 +495,26 @@ deallocate_memory();
 
 }
 
-
+#define run_times 31
 
 int main() {
 
 double start_time, run_time;
+double RUNS[run_times];
 
+for (int i = 0; i < run_times; i++) {
+    start_time = omp_get_wtime();
 
-start_time = omp_get_wtime();
+    cnn();
 
-cnn();
+    run_time = (omp_get_wtime() - start_time);
 
-run_time = (omp_get_wtime() - start_time);
-printf("\n\nThe model's latency is %f seconds\n",  run_time);
+    RUNS[i] = run_time;
 
+    printf("run %d: %f s\n", i, RUNS[i]);
     
+}
+
 return 0;
 }
 
