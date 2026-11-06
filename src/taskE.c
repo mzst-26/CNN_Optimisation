@@ -208,6 +208,30 @@ void FC(float** input, float** weights, float** bias, float** output, int batch_
     
 }
 
+
+
+//adds the 8 floats inside an AVX register
+float add_8_floats(__m256 v) {
+
+    float temp[8];
+
+    float sum;
+    int n;
+
+    _mm256_storeu_ps(temp, v);//copy the register into a normal array
+    sum = 0.0f;
+
+    for (n = 0; n < 8; n++) {
+        sum += temp[n];
+    }
+    return sum;
+}
+
+
+
+
+
+
 void ReLU(float** input, float** output,
                int batch_size, int height, int width, int channels) {
     float *Input = *input;
@@ -692,7 +716,10 @@ int main() {
             layer_time[i],
             gflops_per_sec);
         }     
-    
+        
+        //FLOP/s of each version of the first FC routine
+        printf("\nTask E - Layer 15 FC\n");
+        printf("Version, Time (s), GFLOP/s\n");
 
 
         
