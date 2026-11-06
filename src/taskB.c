@@ -465,7 +465,18 @@ create_load_input_tensor(&tensor1,batch_size,128,128,3,2,2,5,5,64);
 create_load_output_tensor(&tensor2,batch_size,62,62,64);
 create_load_filter(&filter1,64,3,5,5);
 create_load_bias(&bias1,64);
-conv_2d(&tensor1,&filter1,&bias1,&tensor2,batch_size,128,128,3,2,2,5,5,64);
+// conv_2d(&tensor1,&filter1,&bias1,&tensor2,batch_size,128,128,3,2,2,5,5,64); replaced this with the loop bellow
+for (r = 0; r < run_times; r++) {
+    start = omp_get_wtime();//start the timer                         
+    for (k = 0; k < reps; k++) {
+        //call the conv_2d function for reps time
+        conv_2d(&tensor1,&filter1,&bias1,&tensor2,batch_size,128,128,3,2,2,5,5,64);
+    }
+    times[r] = (omp_get_wtime() - start) / reps;//end the timer and calculate the run time.        
+}
+
+layer_time[0] = median(times, run_times);
+layer_flops[0] = conv_flops(batch_size,128,128,3,2,2,5,5,64);
 
 //LAYER #2 - ReLU 	[batch, 62, 62, 64]
 ReLU(&tensor2,&tensor2,batch_size,62,62,64);
@@ -478,7 +489,18 @@ max_pooling(&tensor2,&tensor3, batch_size, 62, 62, 64,2,2);
 create_load_output_tensor(&tensor4,batch_size,29,29,128);
 create_load_filter(&filter2,128,64,3,3);
 create_load_bias(&bias2,128);
-conv_2d(&tensor3,&filter2,&bias2,&tensor4,batch_size,31,31,64,1,1,3,3,128);
+// conv_2d(&tensor3,&filter2,&bias2,&tensor4,batch_size,31,31,64,1,1,3,3,128); 
+for (r = 0; r < run_times; r++) {
+    start = omp_get_wtime();
+    for (k = 0; k < reps; k++) {
+        conv_2d(&tensor3,&filter2,&bias2,&tensor4,batch_size,31,31,64,1,1,3,3,128);
+    }
+    times[r] = (omp_get_wtime() - start) / reps;
+}
+
+layer_time[1] = median(times, run_times);
+
+layer_flops[1] = conv_flops(batch_size,31,31,64,1,1,3,3,128);
 
 //LAYER #5 - ReLU
 ReLU(&tensor4,&tensor4,batch_size,29,29,128);
@@ -491,7 +513,18 @@ max_pooling(&tensor4,&tensor5, batch_size, 29, 29, 128,2,2);
 create_load_output_tensor(&tensor6,batch_size,12,12,256);
 create_load_filter(&filter3,256,128,3,3);
 create_load_bias(&bias3,256);
-conv_2d(&tensor5,&filter3,&bias3,&tensor6,batch_size,14,14,128,1,1,3,3,256);
+// conv_2d(&tensor5,&filter3,&bias3,&tensor6,batch_size,14,14,128,1,1,3,3,256);
+for (r = 0; r < run_times; r++) {
+    start = omp_get_wtime();
+    for (k = 0; k < reps; k++) {
+        conv_2d(&tensor5,&filter3,&bias3,&tensor6,batch_size,14,14,128,1,1,3,3,256);
+    }
+
+    times[r] = (omp_get_wtime() - start) / reps;
+}
+
+layer_time[2] = median(times, run_times);
+layer_flops[2] = conv_flops(batch_size,14,14,128,1,1,3,3,256);
 
 //LAYER #8 - ReLU
 ReLU(&tensor6,&tensor6,batch_size,12,12,256);
@@ -500,7 +533,17 @@ ReLU(&tensor6,&tensor6,batch_size,12,12,256);
 create_load_output_tensor(&tensor7,batch_size,10,10,256);
 create_load_filter(&filter4,256,256,3,3);
 create_load_bias(&bias4,256);
-conv_2d(&tensor6,&filter4,&bias4,&tensor7,batch_size,12,12,256,1,1,3,3,256);
+// conv_2d(&tensor6,&filter4,&bias4,&tensor7,batch_size,12,12,256,1,1,3,3,256);
+for (r = 0; r < run_times; r++) {
+    start = omp_get_wtime();
+    for (k = 0; k < reps; k++) {
+        conv_2d(&tensor6,&filter4,&bias4,&tensor7,batch_size,12,12,256,1,1,3,3,256);
+    }
+    times[r] = (omp_get_wtime() - start) / reps;
+}
+
+layer_time[3] = median(times, run_times);
+layer_flops[3] = conv_flops(batch_size,12,12,256,1,1,3,3,256);
 
 //LAYER #10 - ReLU
 ReLU(&tensor7,&tensor7,batch_size,10,10,256);
@@ -509,7 +552,17 @@ ReLU(&tensor7,&tensor7,batch_size,10,10,256);
 create_load_output_tensor(&tensor8,batch_size,8,8,512);
 create_load_filter(&filter5,512,256,3,3);
 create_load_bias(&bias5,512);
-conv_2d(&tensor7,&filter5,&bias5,&tensor8,batch_size,10,10,256,1,1,3,3,512);
+// conv_2d(&tensor7,&filter5,&bias5,&tensor8,batch_size,10,10,256,1,1,3,3,512);
+for (r = 0; r < run_times; r++) {
+    start = omp_get_wtime();
+    for (k = 0; k < reps; k++) {
+        conv_2d(&tensor7,&filter5,&bias5,&tensor8,batch_size,10,10,256,1,1,3,3,512);
+    }
+    times[r] = (omp_get_wtime() - start) / reps;
+}
+
+layer_time[4] = median(times, run_times);
+layer_flops[4] = conv_flops(batch_size,10,10,256,1,1,3,3,512);
 
 //LAYER #12 - ReLU
 ReLU(&tensor8,&tensor8,batch_size,8,8,512);
