@@ -401,13 +401,17 @@ free(bias7);
 #define run_times 11    // measurements per layer (odd so the median is one element)
 #define reps 10   // calls per measurement
 
+double times[run_times];
+double layer_time[7];
+double layer_flops[7];
+double start;
+int r, k;
 
 //bubble sort. put the times in order from smallest to largest
 double median(double t[], int n) {
     int i;
     int j;
     double temp;
-
         for (i = 0; i < n - 1; i++) {
         for (j = 0; j < n - 1 - i; j++) {
             if (t[j] > t[j + 1]) {
@@ -421,8 +425,36 @@ double median(double t[], int n) {
 
     // the middle value is the median
     return t[n / 2];
-
 }
+
+//FLOPs of one FC call
+double fc_flops(int B, int input_dim, int output_dim) {
+
+    double flops;
+    //2 FLOPs (1 multiply + 1 add) for every iteration of the inner loop
+    flops = 2.0 * B * output_dim * input_dim;
+    return flops;
+}
+
+// compute the FLOPs of one call to conv2d
+double conv_flops(int B, int Yin, int Xin, int D, int StrideY, int StrideX, int MaskY, int MaskX, int M) {
+    int Y;
+    int X;
+    
+    double flops;
+
+    // output size is same formula as inside conv_2d
+    X = (Xin - (MaskX - StrideX)) / StrideX;
+
+    Y = (Yin - (MaskY - StrideY)) / StrideY;
+
+    // 2 FLOPs (1 multiply + 1 add) for every iteration of the inner loop
+    flops = 2.0 * B * M * Y * X * MaskY * MaskX * D;
+
+    return flops;
+}
+
+
 
 void cnn(){
 
