@@ -398,6 +398,31 @@ free(bias7);
 
 }
 
+#define run_times 11    // measurements per layer (odd so the median is one element)
+#define reps 10   // calls per measurement
+
+
+//bubble sort. put the times in order from smallest to largest
+double median(double t[], int n) {
+    int i;
+    int j;
+    double temp;
+
+        for (i = 0; i < n - 1; i++) {
+        for (j = 0; j < n - 1 - i; j++) {
+            if (t[j] > t[j + 1]) {
+                // swap the two values
+                temp = t[j];
+                t[j] = t[j + 1];
+                t[j + 1] = temp;
+            }
+        }
+    }
+
+    // the middle value is the median
+    return t[n / 2];
+
+}
 
 void cnn(){
 
@@ -483,43 +508,27 @@ deallocate_memory();
 
 }
 
-#define run_times 11 // odd number to get an element as median 
-#define reps 15
-
 int main() {
 
-    double start_time, run_time;
-    double RUNS[run_times]; // array to store the run times
-    int i, j;
+    int i;
+    int layer_number[7] = {1, 4, 7, 9, 11, 15, 17};   // the Conv2D and FC layers that were timed
+    double flops_per_sec;
 
-    for (int i = 0; i < run_times; i++) {
+    cnn();   // runs the CNN once; each Conv2D and FC layer is timed inside cnn()
 
-        start_time = omp_get_wtime();  // start the timer
+    printf("Layer, FLOPs, Time (s), GFLOP/s\n");
 
-        for (int br = 0; br < reps; br++){
-            cnn();
-        }
-        run_time = (omp_get_wtime() - start_time); //end the timer and calculate the run time
+    for (i = 0; i < 7; i++) {
+        
+        flops_per_sec = layer_flops[i] / layer_time[i];   // FLOP/s = FLOP count / execution time in seconds
 
-        RUNS[i] = run_time; // store the run time in the array
+        printf("%d, %.0f, %.6f, %.3f\n",
 
-        // printf("run %d: %f s\n", i, RUNS[i]); // print the run time for this iteration
+               layer_number[i],// layer number
+               layer_flops[i],// FLOP count of one call
+               layer_time[i],// median time of one call (seconds)
+               flops_per_sec / 1e9); // FLOP/s converted to GFLOP/s
     }
-
-    for (i = 0; i < run_times -1; i++) {
-        for (j = 0; j < run_times - i - 1; j++) {
-            if (RUNS[j] > RUNS[j + 1]) { // if the current run time is greater than the next run time, swap them
-                double temp = RUNS[j]; // store the current run time in a temporary variable
-                RUNS[j] = RUNS[j + 1];// assign the next run time to the current run time
-                RUNS[j + 1] = temp;//set the current run time to the next run time
-            }
-        }
-    }
-
-
-    printf("\nmin    = %f s\n", RUNS[0]);
-    printf("Median run time: %f s\n", RUNS[run_times / 2]); // print the median run time
-    printf("max    = %f s\n", RUNS[run_times - 1]);
 
     return 0;
 }
