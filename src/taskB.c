@@ -497,7 +497,7 @@ double fc_bytes(int B, int input_dim, int output_dim) {
 }
 
 
-void `cnn(){
+void cnn(){
 
 unsigned int batch_size=1;//INPUT
 
