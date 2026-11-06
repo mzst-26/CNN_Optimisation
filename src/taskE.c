@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <immintrin.h>//gives C access to the AVX intrinsics
+#define TILE 2048//tile size
 
 float * tensor1; //pointer to tensor
 float * tensor2; //pointer to tensor 
@@ -370,6 +371,109 @@ void FC_regblock(
                 sum += Weights[i * input_dim + j] * Input[b * input_dim + j];
             }
             Output[b * output_dim + i] = sum;
+        }
+    }
+}
+
+
+//Version 3: AVX + fmadd + register blocking + LOOP TILING. THE TILE SIZE IS DEFINED AS A GLOABAL VARIABLE = 2048
+void FC_tiled(
+    float** input, 
+    float** weights, 
+    float** bias, 
+    float** output, 
+    int batch_size, 
+    int input_dim, 
+    int output_dim
+) {
+
+    float *Input = *input;
+
+    float *Weights = *weights;
+
+    float *Bias = *bias;
+
+    float *Output = *output;
+
+    int b, i, j, jj, j_end;
+    __m256 acc0, acc1, acc2, acc3, x, w;
+
+    for (b = 0; b < batch_size; b++) {
+
+        //every output starts with its bias 
+        //each tile adds its partial sum
+        for (i = 0; i < output_dim; i++) {
+            //i did this to avoid adding the bias many times at the end of each tile.
+            Output[b * output_dim + i] = Bias[i]; 
+        }
+
+        //loop tiling: tile input elements at a time, so this part of Input stays in the L1 cache
+        //input the input dimension because it is usally the largest dimension and it is the one that will be tiled.
+        for (jj = 0; jj < input_dim; jj += TILE) {
+
+            j_end = jj + TILE;
+
+            if (j_end > input_dim) {
+                //the last tile can be smaller (padding code)
+                j_end = input_dim;
+            }
+
+            //register blocking: 4 output rows at a time
+            for (i = 0; i + 4 <= output_dim; i += 4) {
+
+                acc0 = _mm256_setzero_ps();
+                acc1 = _mm256_setzero_ps();
+                acc2 = _mm256_setzero_ps();
+                acc3 = _mm256_setzero_ps();
+
+             
+                for (j = jj; j + 8 <= j_end; j += 8) {
+                    //load the input once and use it 4 times for the 4 output rows.
+                    x = _mm256_loadu_ps(&Input[b * input_dim + j]);
+                    
+                    w = _mm256_loadu_ps(&Weights[(i + 0) * input_dim + j]);
+                    acc0 = _mm256_fmadd_ps(w, x, acc0);
+
+                    w = _mm256_loadu_ps(&Weights[(i + 1) * input_dim + j]);
+                    acc1 = _mm256_fmadd_ps(w, x, acc1);
+
+                    w = _mm256_loadu_ps(&Weights[(i + 2) * input_dim + j]);
+                    acc2 = _mm256_fmadd_ps(w, x, acc2);
+
+                    w = _mm256_loadu_ps(&Weights[(i + 3) * input_dim + j]);
+                    acc3 = _mm256_fmadd_ps(w, x, acc3);
+                }
+
+                //add the 8 floats to the partial sum (bias was added at the start)
+                Output[b * output_dim + i + 0] += add_8_floats(acc0);
+
+                Output[b * output_dim + i + 1] += add_8_floats(acc1);
+
+                Output[b * output_dim + i + 2] += add_8_floats(acc2);
+
+                Output[b * output_dim + i + 3] += add_8_floats(acc3);
+
+
+                //Handle input elements left over after processing groups of 8 floats
+                //for the current group of four output rows.
+                for (; j < j_end; j++) {
+                    //add the remaining elements to the 4 output rows
+                    Output[b * output_dim + i + 0] += Weights[(i + 0) * input_dim + j] * Input[b * input_dim + j];
+
+                    Output[b * output_dim + i + 1] += Weights[(i + 1) * input_dim + j] * Input[b * input_dim + j];
+
+                    Output[b * output_dim + i + 2] += Weights[(i + 2) * input_dim + j] * Input[b * input_dim + j];
+
+                    Output[b * output_dim + i + 3] += Weights[(i + 3) * input_dim + j] * Input[b * input_dim + j];
+                }
+            }
+            //remainder rows (padding code) for handleing output rows left over after processing output_dim % 4
+            for (; i < output_dim; i++) {
+                for (j = jj; j < j_end; j++) {
+                    //add the remaining elements to the output row
+                    Output[b * output_dim + i] += Weights[i * input_dim + j] * Input[b * input_dim + j];
+                }
+            }
         }
     }
 }
@@ -835,6 +939,21 @@ for (r = 0; r < run_times; r++) {
 
 fc_time[2] = median(times, run_times);
 
+///VERSION 3 (AVX + fmadd + register blocking + loop tiling)
+for (r = 0; r < run_times; r++) {
+    start = omp_get_wtime();
+
+    for (k = 0; k < reps; k++) {
+        FC_tiled(&tensor9, &filter6, &bias6, &tensor10, batch_size, 8192, 4096);
+    }
+
+    times[r] = (omp_get_wtime() - start) / reps;
+
+}
+
+
+fc_time[3] = median(times, run_times);
+
 
 //LAYER #16 - 2d ReLU [batch, 4096]
 ReLU(&tensor10,&tensor10,batch_size,1,1,4096);
@@ -900,6 +1019,8 @@ int main() {
         printf("AVX + fmadd, %.6f, %.3f\n",         fc_time[1], layer_flops[5] / fc_time[1] / 1000000000.0);
 
         printf("+ register blocking, %.6f, %.3f\n", fc_time[2], layer_flops[5] / fc_time[2] / 1000000000.0);
+
+        printf("+ loop tiling, %.6f, %.3f\n",       fc_time[3], layer_flops[5] / fc_time[3] / 1000000000.0);
         
 
     return 0;
