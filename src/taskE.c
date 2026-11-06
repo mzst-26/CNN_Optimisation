@@ -285,6 +285,95 @@ void FC_avx(
 }
 
 
+//Version 2: AVX + fmadd + register blocking (4 output rows at once)
+void FC_regblock(
+    float** input, 
+    float** weights, 
+    float** bias, 
+    float** output, 
+    int batch_size, 
+    int input_dim, 
+    int output_dim
+) {
+
+    float *Input = *input;
+
+    float *Weights = *weights;
+
+    float *Bias = *bias;
+
+    float *Output = *output;
+
+    int b;
+    int i;
+    int j;
+
+
+    float sum0, sum1, sum2, sum3, sum;
+    __m256 acc0, acc1, acc2, acc3, x, w;
+
+    for (b = 0; b < batch_size; b++) {
+
+        // 4 output rows at a time
+        for (i = 0; i + 4 <= output_dim; i += 4) {
+
+            //4 accumulators for 4 output rows
+            acc0 = _mm256_setzero_ps();
+            acc1 = _mm256_setzero_ps();
+            acc2 = _mm256_setzero_ps();
+            acc3 = _mm256_setzero_ps();
+
+            for (j = 0; j + 8 <= input_dim; j += 8) {
+                //load the input once and use it 4 times for the 4 output rows. 
+                x = _mm256_loadu_ps(&Input[b * input_dim + j]);   
+            
+                w = _mm256_loadu_ps(&Weights[(i + 0) * input_dim + j]);
+                acc0 = _mm256_fmadd_ps(w, x, acc0);
+
+                w = _mm256_loadu_ps(&Weights[(i + 1) * input_dim + j]);
+                acc1 = _mm256_fmadd_ps(w, x, acc1);
+
+                w = _mm256_loadu_ps(&Weights[(i + 2) * input_dim + j]);
+                acc2 = _mm256_fmadd_ps(w, x, acc2);
+
+                w = _mm256_loadu_ps(&Weights[(i + 3) * input_dim + j]);
+                acc3 = _mm256_fmadd_ps(w, x, acc3);
+
+            }
+            // add the 8 floats inside the AVX register and add the bias
+            sum0 = Bias[i + 0] + add_8_floats(acc0);
+
+            sum1 = Bias[i + 1] + add_8_floats(acc1);
+
+            sum2 = Bias[i + 2] + add_8_floats(acc2);
+
+            sum3 = Bias[i + 3] + add_8_floats(acc3);
+
+            // remainder loop (padding code) for input_dim % 8
+            for (; j < input_dim; j++) {
+                sum0 += Weights[(i + 0) * input_dim + j] * Input[b * input_dim + j];
+                sum1 += Weights[(i + 1) * input_dim + j] * Input[b * input_dim + j];
+                sum2 += Weights[(i + 2) * input_dim + j] * Input[b * input_dim + j];
+                sum3 += Weights[(i + 3) * input_dim + j] * Input[b * input_dim + j];
+            }
+
+            Output[b * output_dim + i + 0] = sum0;
+            Output[b * output_dim + i + 1] = sum1;
+            Output[b * output_dim + i + 2] = sum2;
+            Output[b * output_dim + i + 3] = sum3;
+        }
+
+        // remainder rows (padding code) for output_dim % 4
+        for (; i < output_dim; i++) {
+            sum = Bias[i];
+            for (j = 0; j < input_dim; j++) {
+                sum += Weights[i * input_dim + j] * Input[b * input_dim + j];
+            }
+            Output[b * output_dim + i] = sum;
+        }
+    }
+}
+
 
 
 
@@ -733,7 +822,18 @@ for (r = 0; r < run_times; r++) {
 
 fc_time[1] = median(times, run_times);
 
+////TIME VESRION 2 (AVX + fmadd + register blocking)
+for (r = 0; r < run_times; r++) {
+    start = omp_get_wtime();
 
+    for (k = 0; k < reps; k++) {
+        FC_regblock(&tensor9, &filter6, &bias6, &tensor10, batch_size, 8192, 4096);
+    }
+
+    times[r] = (omp_get_wtime() - start) / reps;
+}
+
+fc_time[2] = median(times, run_times);
 
 
 //LAYER #16 - 2d ReLU [batch, 4096]
@@ -798,6 +898,8 @@ int main() {
         printf("Original, %.6f, %.3f\n",            fc_time[0], layer_flops[5] / fc_time[0] / 1000000000.0);
 
         printf("AVX + fmadd, %.6f, %.3f\n",         fc_time[1], layer_flops[5] / fc_time[1] / 1000000000.0);
+
+        printf("+ register blocking, %.6f, %.3f\n", fc_time[2], layer_flops[5] / fc_time[2] / 1000000000.0);
         
 
     return 0;
