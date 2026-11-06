@@ -1,11 +1,4 @@
 /*
-------------------DR VASILIOS KELEFOURAS-----------------------------------------------------
-------------------COMP3001 ------------------------------------------------------------------
-------------------PARALLEL PROGAMMING MODULE-------------------------------------------------
-------------------UNIVERSITY OF PLYMOUTH, SCHOOL OF ENGINEERING, COMPUTING AND MATHEMATICS---
-*/
-
-/*
 THIS IS AN IMPLEMENTATION OF A SIMPLE CNN MODEL USING 17 LAYERS. 
 COMPILE USING gcc cnn_26_27.c -o p -O3 -fopenmp
 */
