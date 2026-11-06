@@ -578,7 +578,20 @@ max_pooling(&tensor8,&tensor9, batch_size, 8, 8, 512,2,2);
 create_load_output_tensor(&tensor10,batch_size,1,1,4096);
 create_load_filter(&filter6,8192,4096,1,1);
 create_load_bias(&bias6,4096);
-FC(&tensor9, &filter6, &bias6, &tensor10, batch_size, 8192, 4096);
+// FC(&tensor9, &filter6, &bias6, &tensor10, batch_size, 8192, 4096);
+for (r = 0; r < run_times; r++) {
+
+    start = omp_get_wtime();
+    for (k = 0; k < reps; k++) {
+        // call the FC function for reps time
+        FC(&tensor9, &filter6, &bias6, &tensor10, batch_size, 8192, 4096);
+    }
+    times[r] = (omp_get_wtime() - start) / reps;
+}
+
+layer_time[5] = median(times, run_times);
+//the fc_flops parameters are batch_size, input_dim, output_dim
+layer_flops[5] = fc_flops(batch_size, 8192, 4096);
 
 //LAYER #16 - 2d ReLU [batch, 4096]
 ReLU(&tensor10,&tensor10,batch_size,1,1,4096);
@@ -587,7 +600,16 @@ ReLU(&tensor10,&tensor10,batch_size,1,1,4096);
 create_load_output_tensor(&tensor11,batch_size,1,1,10);
 create_load_filter(&filter7,4096,10,1,1);
 create_load_bias(&bias7,10);
-FC(&tensor10, &filter7, &bias7, &tensor11, batch_size, 4096, 10);
+// FC(&tensor10, &filter7, &bias7, &tensor11, batch_size, 4096, 10);
+for (r = 0; r < run_times; r++) {
+    start = omp_get_wtime();
+    for (k = 0; k < reps; k++) {
+        FC(&tensor10, &filter7, &bias7, &tensor11, batch_size, 4096, 10);
+    }
+    times[r] = (omp_get_wtime() - start) / reps;
+}
+layer_time[6] = median(times, run_times);
+layer_flops[6] = fc_flops(batch_size, 4096, 10);
 
 deallocate_memory();
 
@@ -596,23 +618,23 @@ deallocate_memory();
 int main() {
 
     int i;
-    int layer_number[7] = {1, 4, 7, 9, 11, 15, 17};   // the Conv2D and FC layers that were timed
+    int layer_number[7] = {1, 4, 7, 9, 11, 15, 17};// these are the layers that were timed
     double flops_per_sec;
+    double gflops_per_sec;
 
-    cnn();   // runs the CNN once; each Conv2D and FC layer is timed inside cnn()
+    cnn();//each layer is timed inside cnn()
 
     printf("Layer, FLOPs, Time (s), GFLOP/s\n");
 
     for (i = 0; i < 7; i++) {
-        
-        flops_per_sec = layer_flops[i] / layer_time[i];   // FLOP/s = FLOP count / execution time in seconds
 
-        printf("%d, %.0f, %.6f, %.3f\n",
+        //FLOP/s = FLOP count / execution time in seconds
+        flops_per_sec = layer_flops[i] / layer_time[i];
 
-               layer_number[i],// layer number
-               layer_flops[i],// FLOP count of one call
-               layer_time[i],// median time of one call (seconds)
-               flops_per_sec / 1e9); // FLOP/s converted to GFLOP/s
+        // convert to GFLOP/s (1 GFLOP/s = 1,000,000,000 FLOP/s)
+        gflops_per_sec = flops_per_sec / 1000000000.0;
+
+        printf("%d, %.0f, %.6f, %.3f\n", layer_number[i], layer_flops[i], layer_time[i], gflops_per_sec);
     }
 
     return 0;
