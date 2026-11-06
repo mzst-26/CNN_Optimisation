@@ -24,6 +24,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
+#include <immintrin.h>//gives C access to the AVX intrinsics
 
 float * tensor1; //pointer to tensor
 float * tensor2; //pointer to tensor 
@@ -207,6 +208,8 @@ void FC(float** input, float** weights, float** bias, float** output, int batch_
     */
     
 }
+///////part of TASK E
+
 
 
 
@@ -227,6 +230,59 @@ float add_8_floats(__m256 v) {
     return sum;
 }
 
+
+//This is Version 1: FC vectorised with AVX and fmadd
+void FC_avx(
+    float** input, 
+    float** weights, 
+    float** bias, 
+    float** output, 
+    int batch_size, 
+    int input_dim, 
+    int output_dim
+) {
+
+    float *Input = *input;
+
+    float *Weights = *weights;
+
+    float *Bias = *bias;
+
+    float *Output = *output;
+
+    int b;
+    int i;
+    int j;
+
+    float sum;
+    __m256 acc, w, x;//this will hold 8 partial sums, w is the weights, x is the input
+    // create a loop over the batch size
+    for (b = 0; b < batch_size; b++) {
+        //loop over the output dimension
+        for (i = 0; i < output_dim; i++) {
+
+            acc = _mm256_setzero_ps();///8 partial sums, all start at 0
+
+            // main loop: 8 floats per time this loop will run
+            for (j = 0; j + 8 <= input_dim; j += 8) {
+                // load 8 weights and 8 inputs
+                w = _mm256_loadu_ps(&Weights[i * input_dim + j]);   // load 8 weights
+                x = _mm256_loadu_ps(&Input[b * input_dim + j]);     // load 8 inputs
+                acc = _mm256_fmadd_ps(w, x, acc);                   // acc = w * x + acc
+            }
+            //add the 8 floats inside the AVX register
+            sum = Bias[i] + add_8_floats(acc);
+
+            //remainder loop or padding for the last input_dim % 8 elements
+            for (; j < input_dim; j++) {
+                //add the remaining elements
+                sum += Weights[i * input_dim + j] * Input[b * input_dim + j];
+            }
+
+            Output[b * output_dim + i] = sum;
+        }
+    }
+}
 
 
 
@@ -428,6 +484,7 @@ double layer_flops[7];
 double layer_bytes[7];
 double start;
 int r, k;
+double fc_time[4]; //stores the median of each version
 
 //bubble sort. put the times in order from smallest to largest
 double median(double t[], int n) {
@@ -661,6 +718,23 @@ layer_time[5] = median(times, run_times);
 layer_flops[5] = fc_flops(batch_size, 8192, 4096);
 layer_bytes[5] = fc_bytes(batch_size, 8192, 4096);
 
+fc_time[0] = layer_time[5];// store the time of the original FC function for later comparison
+
+//TIME VERSION 1 applied AVX + fmadd
+for (r = 0; r < run_times; r++) {
+    start = omp_get_wtime();
+
+    for (k = 0; k < reps; k++) {
+        FC_avx(&tensor9, &filter6, &bias6, &tensor10, batch_size, 8192, 4096);
+    }
+
+    times[r] = (omp_get_wtime() - start) / reps;
+}
+
+fc_time[1] = median(times, run_times);
+
+
+
 
 //LAYER #16 - 2d ReLU [batch, 4096]
 ReLU(&tensor10,&tensor10,batch_size,1,1,4096);
@@ -721,7 +795,9 @@ int main() {
         printf("\nTask E - Layer 15 FC\n");
         printf("Version, Time (s), GFLOP/s\n");
 
+        printf("Original, %.6f, %.3f\n",            fc_time[0], layer_flops[5] / fc_time[0] / 1000000000.0);
 
+        printf("AVX + fmadd, %.6f, %.3f\n",         fc_time[1], layer_flops[5] / fc_time[1] / 1000000000.0);
         
 
     return 0;
