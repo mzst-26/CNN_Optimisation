@@ -1,0 +1,704 @@
+//CNN architecture with 17 layers is as follows:
+//LAYER #1 - conv2d [batch, 128, 128, 3, 2, 2, 5, 5, 64]
+//LAYER #2 - ReLU 	[batch, 62, 62, 64]
+//LAYER #3 - pooling 2,2 [batch, 64, 31, 31]
+//LAYER #4 - conv2d [batch, 31, 31, 64, 1, 1, 3, 3, 128]
+//LAYER #5 - ReLU
+//LAYER #6 - pooling 2,2 [batch, 128, 14, 14]
+//LAYER #7 - conv2d [batch, 14, 14, 128, 1, 1, 3, 3, 256]
+//LAYER #8 - ReLU
+//LAYER #9 - conv2d [batch, 12, 12, 256, 1, 1, 3, 3, 256]
+//LAYER #10 - ReLU
+//LAYER #11 - conv2d [batch, 10, 10, 256, 1, 1, 3, 3, 512]
+//LAYER #12 - ReLU
+//LAYER #13 - pooling 2,2 [batch, 512, 4, 4]
+//LAYER #14 - flatten [batch, 512 * 4 * 4 = 8192]
+//LAYER #15 - Fully Connected [batch,8192,4096]
+//LAYER #16 - 2d ReLU [batch, 4096]
+//LAYER #17 - Fully Connected [batch, 4096,10]
+
+
+#include <stdio.h>
+#include <float.h> 
+#include <omp.h>
+#include <string.h>
+#include <stdlib.h>
+#include <math.h>
+
+float * tensor1; //pointer to tensor
+float * tensor2; //pointer to tensor 
+float * tensor3; //pointer to tensor 
+float * tensor4; //pointer to tensor 
+float * tensor5; //pointer to tensor 
+float * tensor6; //pointer to tensor 
+float * tensor7; //pointer to tensor 
+float * tensor8; //pointer to tensor 
+float * tensor9; //pointer to tensor 
+float * tensor10; //pointer to tensor 
+float * tensor11; //pointer to tensor 
+float * filter1; //pointer to filter array
+float * filter2; //pointer to filter array
+float * filter3; //pointer to filter array
+float * filter4; //pointer to filter array
+float * filter5; //pointer to filter array
+float * filter6; //pointer to filter array
+float * filter7; //pointer to filter array
+float *bias1;
+float *bias2;
+float *bias3;
+float *bias4;
+float *bias5;
+float *bias6;
+float *bias7;
+
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
+
+
+void conv_2d(float ** in, float ** filter, float **bias, float ** out, unsigned int B,unsigned int Yin, unsigned int Xin,unsigned int D,unsigned int StrideY,unsigned int StrideX, unsigned int MaskY, unsigned int MaskX, unsigned int M){
+
+    float temp;
+
+    float *In = *in;
+    float *Filter = *filter;
+    float *Bias = *bias;
+    float *Out = *out;
+
+    unsigned int X=(Xin-(MaskX-StrideX)) / StrideX;
+    unsigned int Y=(Yin-(MaskY-StrideY)) / StrideY;
+
+    for (unsigned int b = 0; b < B; b++) { //batch
+        for(unsigned int m = 0; m < M; m++){
+                for (unsigned int y = 0; y < Y; y++) {			//Output height
+                    for (unsigned int x = 0; x < X; x++) {			//Output Width
+                        temp = 0.0f;
+                        for (unsigned int off_y = 0; off_y < MaskY; off_y++) {
+                            for (unsigned int off_x = 0; off_x < MaskX; off_x++) {
+                                for(unsigned int d = 0; d < D; d++) {
+
+                                    unsigned int in_subscript = b * (Yin * Xin * D)
+                                                                          + (y*StrideY+off_y) * Xin * D
+                                                                          + (x*StrideX+off_x) * D
+                                                                          + d;
+                                    unsigned int filter_subscript = m * MaskY * MaskX * D
+                                                                              + off_y * MaskX * D
+                                                                              + off_x * D
+                                                                              + d;
+
+                                    float s = In[in_subscript];
+                                    float w = Filter[filter_subscript];
+                                    temp += s * w;
+
+
+                                }
+                            }
+                        }
+
+                        unsigned int out_subscript = b * (M * Y * X) +
+                                                               y * (M * X) +
+                                                               x * M
+                                                               + m;
+
+                        Out[out_subscript] = temp + Bias[m];
+
+                    }
+                }
+            }
+         }
+
+
+/*
+    //In case you find the above implementation complicated, it is equivalent to the code below. 
+    //So, when you are thinking about optimization perhaps it is easier to study this version of the code instead which is equivalent
+    
+    for (unsigned int b = 0; b < B; b++) { 
+        for(unsigned int m = 0; m < M; m++){
+                for (unsigned int y = 0; y < Y; y++) {			
+                    for (unsigned int x = 0; x < X; x++) {			
+                        temp = 0.0f;
+                        for (unsigned int off_y = 0; off_y < MaskY; off_y++) {
+                            for (unsigned int off_x = 0; off_x < MaskX; off_x++) {
+                                for(unsigned int d = 0; d < D; d++) {
+                                    temp += in[b][y*StrideY+off_y][x*StrideX+off_x][d] * filter[m][off_y][off_x][d];
+                                }
+                            }
+                        }
+                        out[b][y][x][m] = temp + bias[m];
+                    }
+                }
+            }
+        }
+    */
+
+}
+
+
+
+
+void max_pooling(float** input, float** output,
+                      int batch_size, int in_height, int in_width, int channels,
+                      int pool_size, int stride) {
+
+    float *Input = *input;
+    float *Output = *output;
+    
+    int out_height = (in_height - pool_size) / stride + 1;
+    int out_width  = (in_width - pool_size) / stride + 1;
+
+    for (int b = 0; b < batch_size; b++) {
+        for (int oh = 0; oh < out_height; oh++) {
+            for (int ow = 0; ow < out_width; ow++) {
+                for (int c = 0; c < channels; c++) {
+
+                    float max_val = -FLT_MAX;
+                    for (int ph = 0; ph < pool_size; ph++) {
+                        for (int pw = 0; pw < pool_size; pw++) {
+                            int h = oh * stride + ph;
+                            int w = ow * stride + pw;
+                            int in_index = ((b * in_height + h) * in_width + w) * channels + c;
+                            max_val = MAX(max_val, Input[in_index]);
+                        }
+                    }
+
+                    int out_index = ((b * out_height + oh) * out_width + ow) * channels + c;
+                    Output[out_index] = max_val;
+                }
+            }
+        }
+    }
+}
+
+
+
+// Fully connected layer function - the same weights array is used for each batch
+void FC(float** input, float** weights, float** bias, float** output, int batch_size, int input_dim, int output_dim) {
+
+    float *Input = *input;
+    float *Weights = *weights;
+    float *Bias = *bias;
+    float *Output = *output;
+
+    for (int b = 0; b < batch_size; b++) {
+        for (int i = 0; i < output_dim; i++) {
+        
+            float sum = Bias[i];
+            
+            for (int j = 0; j < input_dim; j++) {
+                sum += Weights[i * input_dim + j] * Input[b * input_dim + j];
+            }
+            
+            Output[b * output_dim + i] = sum;
+        }
+    }
+    
+    /*
+    //In case you find the above implementation complicated, it is equivalent to the code below. 
+    //So, when you are thinking about optimization perhaps it is easier to study this version of the code instead which is equivalent
+    
+    for (int b = 0; b < batch_size; b++) {
+        for (int i = 0; i < output_dim; i++) {
+            output[b][i] = bias[i];
+            for (int j = 0; j < input_dim; j++) {
+                output[b][i] += weights[i][j] * input[b][j];
+            }
+            
+        }
+    }
+    */
+    
+}
+
+void ReLU(float** input, float** output,
+               int batch_size, int height, int width, int channels) {
+    float *Input = *input;
+    float *Output = *output;
+    int index = 0;
+    for (int b = 0; b < batch_size; b++) {
+        for (int h = 0; h < height; h++) {
+            for (int w = 0; w < width; w++) {
+                for (int c = 0; c < channels; c++) {
+                    index = ((b * height + h) * width + w) * channels + c;
+                    
+                    if ( Input[index] > 0 )
+                     Output[index] = Input[index];
+                    else 
+                      Output[index] = 0.0f; 
+
+                }
+            }
+        }
+    }
+    
+        /*
+    //In case you find the above implementation complicated, it is equivalent to the code below. 
+    //So, when you are thinking about optimization perhaps it is easier to study this version of the code instead which is equivalent
+    
+    for (int b = 0; b < batch_size; b++) {
+        for (int h = 0; h < height; h++) {
+            for (int w = 0; w < width; w++) {
+                for (int c = 0; c < channels; c++) {                   
+                    if ( input[b][h][w][c] > 0 )
+                     output[b][h][w][c] = input[b][h][w][c];
+                    else 
+                     output[b][h][w][c] = 0.0f; 
+                }
+            }
+        }
+    */
+    
+    
+}
+
+
+
+void create_load_bias(float** bias, const unsigned int M){
+
+    *bias = (float *) malloc( M * sizeof(float));
+    if (*bias==NULL) {
+        printf("\nerror with malloc allocating bias array");
+        exit(EXIT_FAILURE);
+    }
+
+    for (unsigned int i=0; i<M; i++){
+        (*bias)[i]=(float) (i % 99) + 0.41f;
+        //*(bias_array_FP+i)=((float) (rand() % 5)) + 1;
+        //  *(bias_array_FP+i)=0.0f;
+        // printf("  %d",*(in+i));
+    }
+
+
+
+}
+
+
+void create_load_filter(float** filter, const unsigned int M, const unsigned int D, const unsigned int MaskX, const unsigned int MaskY){
+
+    unsigned int filter_size= M*D*MaskX*MaskY;
+    unsigned int y,x,m,d,offset,cnt=0;
+
+    *filter = (float *) malloc( filter_size * sizeof(float));
+    if (*filter==NULL) {
+        printf("\nerror with malloc allocating filter array");
+        exit(EXIT_FAILURE);
+    }
+
+
+
+    //read the filter array
+    for (m=0;m<M;m++)
+        for (y=0;y<MaskY;y++)
+            for (x=0;x<MaskX;x++){
+                //printf("\n");
+                for (d=0;d<D;d++){
+                    offset=m * MaskY*MaskX*D +
+                           y * MaskX*D +
+                           x*D + d;
+
+                    (*filter)[offset]= (float) (((int)m-(int)y-(int)x+(int)(d % 33)) % 33) * 0.001f + 0.00097f;
+                      cnt++;
+                }}
+
+}
+
+
+void create_load_input_tensor(float** input, unsigned int B,unsigned int Yin, unsigned int Xin,unsigned int D,unsigned int StrideY,unsigned int StrideX, unsigned int MaskY, unsigned int MaskX, unsigned int M){
+
+    unsigned long long int input_size= (unsigned long long int) B * D * Yin * Xin;
+    
+    unsigned int X=(Xin-(MaskX-StrideX)) / StrideX;
+    unsigned int Y=(Yin-(MaskY-StrideY)) / StrideY;
+    
+    unsigned long long int output_size=(unsigned long long int) B * M * Y * X;
+    unsigned long long int in_subscript,out_subscript;
+
+    *input = (float *) malloc( input_size * sizeof(float));
+    if (*input==NULL) {
+        printf("\nerror with malloc allocating input array");
+        exit(EXIT_FAILURE);
+    }
+
+
+    for (int b = 0; b < B; b++)
+        for (int y = 0; y < Yin; y++)
+            for (int x = 0; x < Xin; x ++)
+                for (unsigned int d = 0; d < D; d++) {
+                    in_subscript = (unsigned long long int) b * (Yin * Xin * D)
+                                   + (y ) * Xin * D
+                                   + (x ) * D + d;
+
+                    (*input)[in_subscript] =  ( (float) ((b-y-x+d) % 50) ) + 0.73f;
+                }
+
+
+}
+
+
+
+void create_load_output_tensor(float** output, unsigned int B,unsigned int Y, unsigned int X, unsigned int M){
+   
+    unsigned long long int output_size=(unsigned long long int) B * M * Y * X;
+    unsigned long long int in_subscript,out_subscript;
+
+
+    *output = (float *) malloc( output_size * sizeof(float));
+    if (*output==NULL) {
+        printf("\nerror with malloc allocating output array");
+        exit(EXIT_FAILURE);
+    }
+
+
+    for (int b = 0; b < B; b++)
+        for (int y = 0; y < Y; y++)
+            for (int x = 0; x < X; x ++)
+                for (unsigned int m = 0; m < M; m++) {
+                    out_subscript = (unsigned long long int) b * (M * Y * X) +
+                                    y * (M * X) +
+                                    x * M
+                                    + m;
+
+                    (*output)[out_subscript]=0.0f;
+                }
+
+
+}
+
+
+void deallocate_memory(){
+
+free(tensor1);
+free(tensor2);
+free(tensor3);
+free(tensor4);
+free(tensor5);
+free(tensor6);
+free(tensor7);
+free(tensor8);
+free(tensor9);
+free(tensor10);
+free(tensor11);
+
+free(filter1);
+free(filter2);
+free(filter3);
+free(filter4);
+free(filter5);
+free(filter6);
+free(filter7);
+
+free(bias1);
+free(bias2);
+free(bias3);
+free(bias4);
+free(bias5);
+free(bias6);
+free(bias7);
+
+}
+
+#define run_times 11    // measurements per layer (odd so the median is one element)
+#define reps 10   // calls per measurement
+
+double times[run_times];
+double layer_time[7];
+double layer_flops[7];
+double layer_bytes[7];
+double start;
+int r, k;
+
+//bubble sort. put the times in order from smallest to largest
+double median(double t[], int n) {
+    int i;
+    int j;
+    double temp;
+        for (i = 0; i < n - 1; i++) {
+        for (j = 0; j < n - 1 - i; j++) {
+            if (t[j] > t[j + 1]) {
+                // swap the two values
+                temp = t[j];
+                t[j] = t[j + 1];
+                t[j + 1] = temp;
+            }
+        }
+    }
+
+    // the middle value is the median
+    return t[n / 2];
+}
+
+
+//FLOPs of one FC call
+double fc_flops(int B, int input_dim, int output_dim) {
+
+    double flops;
+    //2 FLOPs (1 multiply + 1 add) for every iteration of the inner loop
+    flops = 2.0 * B * output_dim * input_dim;
+    return flops;
+}
+
+// compute the FLOPs of one call to conv2d
+double conv_flops(int B, int Yin, int Xin, int D, int StrideY, int StrideX, int MaskY, int MaskX, int M) {
+    int Y;
+    int X;
+    
+    double flops;
+
+    // output size is same formula as inside conv_2d
+    X = (Xin - (MaskX - StrideX)) / StrideX;
+
+    Y = (Yin - (MaskY - StrideY)) / StrideY;
+
+    // 2 FLOPs (1 multiply + 1 add) for every iteration of the inner loop
+    flops = 2.0 * B * M * Y * X * MaskY * MaskX * D;
+
+    return flops;
+}
+
+double conv_bytes(int B, int Yin, int Xin, int D, int StrideY, int StrideX, int MaskY, int MaskX, int M) {
+    int Y;
+    int X;
+
+    double input_size;
+    double filter_size;
+    double output_size;
+    double bias_size;
+
+    ////output size is the same as the formula used inside conv_2d
+    X = (Xin - (MaskX - StrideX)) / StrideX;
+    Y = (Yin - (MaskY - StrideY)) / StrideY;
+
+    // number of floats in each array
+    input_size  = 1.0 * B * Yin * Xin * D;
+    filter_size = 1.0 * M * MaskY * MaskX * D;
+    output_size = 1.0 * B * M * Y * X;
+    bias_size   = 1.0 * M;
+
+    // 4 bytes per float
+    return 4.0 * (input_size + filter_size + output_size + bias_size);
+}
+
+//bytes of one FC call
+double fc_bytes(int B, int input_dim, int output_dim) {
+
+    double input_size;
+    double output_size;
+    
+    double weights_size;
+    double bias_size;
+
+    input_size   = 1.0 * B * input_dim;
+    output_size  = 1.0 * B * output_dim;
+    weights_size = 1.0 * input_dim * output_dim;
+    bias_size    = 1.0 * output_dim;
+
+    // 4 bytes per float
+    return 4.0 * (input_size + weights_size + output_size + bias_size);
+}
+
+
+void cnn(){
+
+unsigned int batch_size=1;//INPUT
+
+//LAYER #1 conv2d [batch, 128, 128, 3, 2, 2, 5, 5, 64]
+create_load_input_tensor(&tensor1,batch_size,128,128,3,2,2,5,5,64);
+create_load_output_tensor(&tensor2,batch_size,62,62,64);
+create_load_filter(&filter1,64,3,5,5);
+create_load_bias(&bias1,64);
+// conv_2d(&tensor1,&filter1,&bias1,&tensor2,batch_size,128,128,3,2,2,5,5,64); replaced this with the loop bellow
+for (r = 0; r < run_times; r++) {
+    start = omp_get_wtime();//start the timer                         
+    for (k = 0; k < reps; k++) {
+        //call the conv_2d function for reps time
+        conv_2d(&tensor1,&filter1,&bias1,&tensor2,batch_size,128,128,3,2,2,5,5,64);
+    }
+    times[r] = (omp_get_wtime() - start) / reps;//end the timer and calculate the run time.        
+}
+
+layer_time[0] = median(times, run_times);
+layer_flops[0] = conv_flops(batch_size,128,128,3,2,2,5,5,64);
+layer_bytes[0] = conv_bytes(batch_size,128,128,3,2,2,5,5,64);
+//LAYER #2 - ReLU 	[batch, 62, 62, 64]
+ReLU(&tensor2,&tensor2,batch_size,62,62,64);
+
+//LAYER #3 - pooling 2,2 [batch, 64, 31, 31]
+create_load_output_tensor(&tensor3,batch_size,31,31,64);
+max_pooling(&tensor2,&tensor3, batch_size, 62, 62, 64,2,2);
+
+//LAYER #4 - conv2d [batch, 31, 31, 64, 1, 1, 3, 3, 128]
+create_load_output_tensor(&tensor4,batch_size,29,29,128);
+create_load_filter(&filter2,128,64,3,3);
+create_load_bias(&bias2,128);
+// conv_2d(&tensor3,&filter2,&bias2,&tensor4,batch_size,31,31,64,1,1,3,3,128); 
+for (r = 0; r < run_times; r++) {
+    start = omp_get_wtime();
+    for (k = 0; k < reps; k++) {
+        conv_2d(&tensor3,&filter2,&bias2,&tensor4,batch_size,31,31,64,1,1,3,3,128);
+    }
+    times[r] = (omp_get_wtime() - start) / reps;
+}
+
+layer_time[1] = median(times, run_times);
+
+layer_flops[1] = conv_flops(batch_size,31,31,64,1,1,3,3,128);
+layer_bytes[1] = conv_bytes(batch_size,31,31,64,1,1,3,3,128);
+
+//LAYER #5 - ReLU
+ReLU(&tensor4,&tensor4,batch_size,29,29,128);
+
+//LAYER #6 - pooling 2,2 [batch, 128, 14, 14]
+create_load_output_tensor(&tensor5,batch_size,14,14,128);
+max_pooling(&tensor4,&tensor5, batch_size, 29, 29, 128,2,2);
+
+//LAYER #7 - conv2d [batch, 14, 14, 128, 1, 1, 3, 3, 256]
+create_load_output_tensor(&tensor6,batch_size,12,12,256);
+create_load_filter(&filter3,256,128,3,3);
+create_load_bias(&bias3,256);
+// conv_2d(&tensor5,&filter3,&bias3,&tensor6,batch_size,14,14,128,1,1,3,3,256);
+for (r = 0; r < run_times; r++) {
+    start = omp_get_wtime();
+    for (k = 0; k < reps; k++) {
+        conv_2d(&tensor5,&filter3,&bias3,&tensor6,batch_size,14,14,128,1,1,3,3,256);
+    }
+
+    times[r] = (omp_get_wtime() - start) / reps;
+}
+
+layer_time[2] = median(times, run_times);
+layer_flops[2] = conv_flops(batch_size,14,14,128,1,1,3,3,256);
+
+layer_bytes[2] = conv_bytes(batch_size,14,14,128,1,1,3,3,256);
+//LAYER #8 - ReLU
+ReLU(&tensor6,&tensor6,batch_size,12,12,256);
+
+//LAYER #9 - conv2d [batch, 12, 12, 256, 1, 1, 3, 3, 256]
+create_load_output_tensor(&tensor7,batch_size,10,10,256);
+create_load_filter(&filter4,256,256,3,3);
+create_load_bias(&bias4,256);
+// conv_2d(&tensor6,&filter4,&bias4,&tensor7,batch_size,12,12,256,1,1,3,3,256);
+for (r = 0; r < run_times; r++) {
+    start = omp_get_wtime();
+    for (k = 0; k < reps; k++) {
+        conv_2d(&tensor6,&filter4,&bias4,&tensor7,batch_size,12,12,256,1,1,3,3,256);
+    }
+    times[r] = (omp_get_wtime() - start) / reps;
+}
+
+layer_time[3] = median(times, run_times);
+layer_flops[3] = conv_flops(batch_size,12,12,256,1,1,3,3,256);
+layer_bytes[3] = conv_bytes(batch_size,12,12,256,1,1,3,3,256);
+
+//LAYER #10 - ReLU
+ReLU(&tensor7,&tensor7,batch_size,10,10,256);
+
+//LAYER #11 - conv2d [batch, 10, 10, 256, 1, 1, 3, 3, 512]
+create_load_output_tensor(&tensor8,batch_size,8,8,512);
+create_load_filter(&filter5,512,256,3,3);
+create_load_bias(&bias5,512);
+// conv_2d(&tensor7,&filter5,&bias5,&tensor8,batch_size,10,10,256,1,1,3,3,512);
+for (r = 0; r < run_times; r++) {
+    start = omp_get_wtime();
+    for (k = 0; k < reps; k++) {
+        conv_2d(&tensor7,&filter5,&bias5,&tensor8,batch_size,10,10,256,1,1,3,3,512);
+    }
+    times[r] = (omp_get_wtime() - start) / reps;
+}
+
+layer_time[4] = median(times, run_times);
+layer_flops[4] = conv_flops(batch_size,10,10,256,1,1,3,3,512);
+layer_bytes[4] = conv_bytes(batch_size,10,10,256,1,1,3,3,512);
+
+//LAYER #12 - ReLU
+ReLU(&tensor8,&tensor8,batch_size,8,8,512);
+
+//LAYER #13 - pooling 2,2 [batch, 512, 4, 4]
+create_load_output_tensor(&tensor9,batch_size,4,4,512);
+max_pooling(&tensor8,&tensor9, batch_size, 8, 8, 512,2,2);
+
+//LAYER #14 - flatten [batch, 512 * 4 * 4 = 8192]
+//the tensor is stored as an 1D array in memory, thus no action is needed. 
+
+//LAYER #15 - FC [batch,8192,4096]
+create_load_output_tensor(&tensor10,batch_size,1,1,4096);
+create_load_filter(&filter6,8192,4096,1,1);
+create_load_bias(&bias6,4096);
+// FC(&tensor9, &filter6, &bias6, &tensor10, batch_size, 8192, 4096);
+for (r = 0; r < run_times; r++) {
+
+    start = omp_get_wtime();
+    for (k = 0; k < reps; k++) {
+        // call the FC function for reps time
+        FC(&tensor9, &filter6, &bias6, &tensor10, batch_size, 8192, 4096);
+    }
+    times[r] = (omp_get_wtime() - start) / reps;
+}
+
+layer_time[5] = median(times, run_times);
+//the fc_flops parameters are batch_size, input_dim, output_dim
+layer_flops[5] = fc_flops(batch_size, 8192, 4096);
+layer_bytes[5] = fc_bytes(batch_size, 8192, 4096);
+
+
+//LAYER #16 - 2d ReLU [batch, 4096]
+ReLU(&tensor10,&tensor10,batch_size,1,1,4096);
+
+//LAYER #17 - FC [batch, 4096,10]
+create_load_output_tensor(&tensor11,batch_size,1,1,10);
+create_load_filter(&filter7,4096,10,1,1);
+create_load_bias(&bias7,10);
+// FC(&tensor10, &filter7, &bias7, &tensor11, batch_size, 4096, 10);
+for (r = 0; r < run_times; r++) {
+    start = omp_get_wtime();
+    for (k = 0; k < reps; k++) {
+        FC(&tensor10, &filter7, &bias7, &tensor11, batch_size, 4096, 10);
+    }
+    times[r] = (omp_get_wtime() - start) / reps;
+}
+layer_time[6] = median(times, run_times);
+layer_flops[6] = fc_flops(batch_size, 4096, 10);
+
+layer_bytes[6] = fc_bytes(batch_size, 4096, 10);
+
+deallocate_memory();
+
+}
+
+int main() {
+
+    int i;
+    int layer_number[7] = {1, 4, 7, 9, 11, 15, 17};// these are the layers that were timed
+    double flops_per_sec;
+    double gflops_per_sec;
+    double ai;
+    cnn();//each layer is timed inside cnn()
+
+    printf("Layer, FLOPs, Bytes, AI (FLOP/byte), Time (s), GFLOP/s\n");
+
+    for (i = 0; i < 7; i++) {
+
+        //FLOP/s = FLOP count / execution time in seconds
+        flops_per_sec = layer_flops[i] / layer_time[i];
+
+        // convert to GFLOP/s (1 GFLOP/s = 1,000,000,000 FLOP/s)
+        gflops_per_sec = flops_per_sec / 1000000000.0;
+
+        // calculate arithmetic intensity (AI) = FLOP count / Bytes accessed
+        ai = layer_flops[i] / layer_bytes[i];
+
+        printf("%d, %.0f, %.0f, %.2f, %.6f, %.3f\n",
+            layer_number[i],
+            layer_flops[i],
+            layer_bytes[i],
+            ai,
+            layer_time[i],
+            gflops_per_sec);
+        }     
+    
+
+
+        
+
+    return 0;
+    
+
+}
+
