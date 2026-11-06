@@ -404,6 +404,7 @@ free(bias7);
 double times[run_times];
 double layer_time[7];
 double layer_flops[7];
+double layer_bytes[7];
 double start;
 int r, k;
 
@@ -454,9 +455,49 @@ double conv_flops(int B, int Yin, int Xin, int D, int StrideY, int StrideX, int 
     return flops;
 }
 
+double conv_bytes(int B, int Yin, int Xin, int D, int StrideY, int StrideX, int MaskY, int MaskX, int M) {
+    int Y;
+    int X;
+
+    double input_size;
+    double filter_size;
+    double output_size;
+    double bias_size;
+
+    ////output size is the same as the formula used inside conv_2d
+    X = (Xin - (MaskX - StrideX)) / StrideX;
+    Y = (Yin - (MaskY - StrideY)) / StrideY;
+
+    // number of floats in each array
+    input_size  = 1.0 * B * Yin * Xin * D;
+    filter_size = 1.0 * M * MaskY * MaskX * D;
+    output_size = 1.0 * B * M * Y * X;
+    bias_size   = 1.0 * M;
+
+    // 4 bytes per float
+    return 4.0 * (input_size + filter_size + output_size + bias_size);
+}
+
+//bytes of one FC call
+double fc_bytes(int B, int input_dim, int output_dim) {
+
+    double input_size;
+    double output_size;
+    
+    double weights_size;
+    double bias_size;
+
+    input_size   = 1.0 * B * input_dim;
+    output_size  = 1.0 * B * output_dim;
+    weights_size = 1.0 * input_dim * output_dim;
+    bias_size    = 1.0 * output_dim;
+
+    // 4 bytes per float
+    return 4.0 * (input_size + weights_size + output_size + bias_size);
+}
 
 
-void cnn(){
+void `cnn(){
 
 unsigned int batch_size=1;//INPUT
 
@@ -477,7 +518,7 @@ for (r = 0; r < run_times; r++) {
 
 layer_time[0] = median(times, run_times);
 layer_flops[0] = conv_flops(batch_size,128,128,3,2,2,5,5,64);
-
+layer_bytes[0] = conv_bytes(batch_size,128,128,3,2,2,5,5,64);
 //LAYER #2 - ReLU 	[batch, 62, 62, 64]
 ReLU(&tensor2,&tensor2,batch_size,62,62,64);
 
@@ -501,6 +542,7 @@ for (r = 0; r < run_times; r++) {
 layer_time[1] = median(times, run_times);
 
 layer_flops[1] = conv_flops(batch_size,31,31,64,1,1,3,3,128);
+layer_bytes[1] = conv_bytes(batch_size,31,31,64,1,1,3,3,128);
 
 //LAYER #5 - ReLU
 ReLU(&tensor4,&tensor4,batch_size,29,29,128);
@@ -526,6 +568,7 @@ for (r = 0; r < run_times; r++) {
 layer_time[2] = median(times, run_times);
 layer_flops[2] = conv_flops(batch_size,14,14,128,1,1,3,3,256);
 
+layer_bytes[2] = conv_bytes(batch_size,14,14,128,1,1,3,3,256);
 //LAYER #8 - ReLU
 ReLU(&tensor6,&tensor6,batch_size,12,12,256);
 
@@ -544,6 +587,7 @@ for (r = 0; r < run_times; r++) {
 
 layer_time[3] = median(times, run_times);
 layer_flops[3] = conv_flops(batch_size,12,12,256,1,1,3,3,256);
+layer_bytes[3] = conv_bytes(batch_size,12,12,256,1,1,3,3,256);
 
 //LAYER #10 - ReLU
 ReLU(&tensor7,&tensor7,batch_size,10,10,256);
@@ -563,6 +607,7 @@ for (r = 0; r < run_times; r++) {
 
 layer_time[4] = median(times, run_times);
 layer_flops[4] = conv_flops(batch_size,10,10,256,1,1,3,3,512);
+layer_bytes[4] = conv_bytes(batch_size,10,10,256,1,1,3,3,512);
 
 //LAYER #12 - ReLU
 ReLU(&tensor8,&tensor8,batch_size,8,8,512);
@@ -592,6 +637,7 @@ for (r = 0; r < run_times; r++) {
 layer_time[5] = median(times, run_times);
 //the fc_flops parameters are batch_size, input_dim, output_dim
 layer_flops[5] = fc_flops(batch_size, 8192, 4096);
+layer_bytes[5] = fc_bytes(batch_size, 8192, 4096);
 
 //LAYER #16 - 2d ReLU [batch, 4096]
 ReLU(&tensor10,&tensor10,batch_size,1,1,4096);
@@ -611,6 +657,8 @@ for (r = 0; r < run_times; r++) {
 layer_time[6] = median(times, run_times);
 layer_flops[6] = fc_flops(batch_size, 4096, 10);
 
+layer_bytes[6] = fc_bytes(batch_size, 4096, 10);
+
 deallocate_memory();
 
 }
@@ -621,10 +669,10 @@ int main() {
     int layer_number[7] = {1, 4, 7, 9, 11, 15, 17};// these are the layers that were timed
     double flops_per_sec;
     double gflops_per_sec;
-
+    double ai;
     cnn();//each layer is timed inside cnn()
 
-    printf("Layer, FLOPs, Time (s), GFLOP/s\n");
+    printf("Layer, FLOPs, Bytes, AI (FLOP/byte), Time (s), GFLOP/s\n");
 
     for (i = 0; i < 7; i++) {
 
@@ -634,9 +682,19 @@ int main() {
         // convert to GFLOP/s (1 GFLOP/s = 1,000,000,000 FLOP/s)
         gflops_per_sec = flops_per_sec / 1000000000.0;
 
-        printf("%d, %.0f, %.6f, %.3f\n", layer_number[i], layer_flops[i], layer_time[i], gflops_per_sec);
-    }
+        // calculate arithmetic intensity (AI) = FLOP count / Bytes accessed
+        ai = layer_flops[i] / layer_bytes[i];
+
+        printf("%d, %.0f, %.0f, %.2f, %.6f, %.3f\n",
+            layer_number[i],
+            layer_flops[i],
+            layer_bytes[i],
+            ai,
+            layer_time[i],
+            gflops_per_sec);
+        }     
 
     return 0;
+
 }
 
